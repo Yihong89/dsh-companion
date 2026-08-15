@@ -68,6 +68,7 @@ class CheerSchedule {
         const data = JSON.parse(readFileSync(this.path, 'utf8'))
         if (Array.isArray(data.times) && data.times.length > 0) this.times = data.times
         if (data.fired && typeof data.fired === 'object') this.fired = data.fired
+        if (typeof data.text === 'string') this.text = data.text
       }
     } catch (error) {
       // corrupt schedule file → fall back to defaults
@@ -77,7 +78,9 @@ class CheerSchedule {
   save() {
     try {
       mkdirSync(dirname(this.path), { recursive: true })
-      writeFileSync(this.path, JSON.stringify({ times: this.times, fired: this.fired }, null, 2))
+      const payload = { times: this.times, fired: this.fired }
+      if (this.text) payload.text = this.text
+      writeFileSync(this.path, JSON.stringify(payload, null, 2))
     } catch (error) {
       // best-effort persistence
     }
@@ -85,6 +88,12 @@ class CheerSchedule {
 
   setTimes(times) {
     this.times = times
+    this.save()
+  }
+
+  /** Set a fixed cheer text used at every scheduled time ('' clears it). */
+  setText(text) {
+    this.text = text === undefined || text === null ? '' : String(text).trim()
     this.save()
   }
 
@@ -162,27 +171,61 @@ class SisterController {
   }
 
   /** Fire today's due cheer into every live sister session, once per time. */
-  tick() {
+  async tick() {
     const now = new Date()
     const day = dateKey(now)
     const due = dueTimes(this.schedule.times, now, new Set(this.schedule.fired[day] ?? []))
     if (due.length === 0) return 0
     let fired = 0
     for (const time of due) {
-      const cheer = pickCheer(DEFAULT_CHEERS, now)
       for (const { agent } of this.sessions.values()) {
-        if (this.appendCheer(agent, cheer)) fired++
+        const ok = await this.greet(agent)
+        if (ok) fired++
       }
       this.schedule.markFired(day, time)
     }
     return fired
   }
 
+  /**
+   * Nudge one sister session to greet the learner. A custom fixed text (if the
+   * user set one, e.g. "哥哥，欢迎回家") is spoken directly; otherwise the
+   * sister herself composes a welcome + a fun fact or news item via the cheer
+   * tool (model-generated, so it varies every day). Falls back to the rotating
+   * bank when the session can't accept messages.
+   */
+  async greet(agent) {
+    const fixed = this.schedule.text && this.schedule.text.trim()
+    if (fixed) {
+      return this.appendCheer(agent, fixed.trim())
+    }
+    // Prefer the model: inject a user message so the sister greets with a
+    // fresh fun fact / news. The sister preset has the cheer tool + web
+    // search, so her reply speaks and shows a chip.
+    if (agent !== undefined && typeof agent.followup === 'function') {
+      try {
+        agent.followup({
+          role: 'user',
+          content: [{
+            type: 'text',
+            text: '（定时问候）现在是下午 3 点，哥哥应该快回家了。请先用 cheer 工具送上一句温暖的欢迎回家问候，并顺带分享一个有趣的小知识或今天的小新闻（可以用网络搜索），一两句话就好，说完请哥哥先休息放松。',
+          }],
+          source: { kind: 'plugin', plugin: 'dsh-sister' },
+        })
+        return true
+      } catch (error) {
+        this.ctx.logger?.warn?.(`dsh-sister: greet followup failed: ${error}`)
+        return this.appendCheer(agent, pickCheer(DEFAULT_CHEERS, new Date()))
+      }
+    }
+    return this.appendCheer(agent, pickCheer(DEFAULT_CHEERS, new Date()))
+  }
+
   start() {
     if (this.timer !== null) return
     this.timer = setInterval(() => {
       try {
-        this.tick()
+        void this.tick()
       } catch (error) {
         this.ctx.logger?.warn?.(`dsh-sister: cheer tick failed: ${error}`)
       }
@@ -333,7 +376,7 @@ export async function apply(ctx) {
 
     commandCtx.commands.register({
       name: 'cheer-at',
-      description: 'Set the daily cheer times (HH:MM, 24h). e.g. /cheer-at 08:00 16:30',
+      description: 'Set the daily cheer times (HH:MM, 24h). e.g. /cheer-at 15:00',
       input: { hint: '<HH:MM> [<HH:MM> …]' },
       handler: async ({ rawInput }) => {
         try {
@@ -350,14 +393,33 @@ export async function apply(ctx) {
     })
 
     commandCtx.commands.register({
+      name: 'cheer-text',
+      description: 'Set a fixed cheer text (spoken verbatim at every scheduled time); /cheer-text off clears it and the sister composes a fresh welcome + fun fact each day',
+      input: { hint: '<text> | off' },
+      handler: async ({ rawInput }) => {
+        const text = rawInput.trim()
+        if (text === '' || text === 'off' || text === 'clear') {
+          controller.schedule.setText('')
+          return {
+            kind: 'success',
+            text: 'Fixed cheer text cleared — the sister now composes a fresh welcome + fun fact/news each day.',
+          }
+        }
+        controller.schedule.setText(text)
+        return { kind: 'success', text: `Fixed cheer text set: "${text}"` }
+      },
+    })
+
+    commandCtx.commands.register({
       name: 'sister',
       description: 'Show the sister status: TTS on/off and daily cheer times',
       input: { hint: '' },
       handler: async ({ agent }) => {
         const enabled = controller.speakEnabledOf(agent)
+        const fixed = controller.schedule.text && controller.schedule.text.trim()
         return {
           kind: 'success',
-          text: `Sister status: TTS ${enabled ? 'on' : 'off'} · daily cheers at ${controller.schedule.times.join(', ')} · /speak on|off toggles voice · /cheer-at sets times.`,
+          text: `Sister status: TTS ${enabled ? 'on' : 'off'} · daily cheers at ${controller.schedule.times.join(', ')} · fixed text: ${fixed ? `"${fixed}"` : 'auto (fresh welcome + fun fact each day)'} · /speak on|off toggles voice · /cheer-at sets times · /cheer-text sets fixed text.`,
         }
       },
     })

@@ -113,7 +113,7 @@ test('host plugin registers commands, tools, and the sisterSpeak projection', as
   const { ctx, registrations } = mockCtx()
   await apply(ctx)
   dispose(ctx)
-  assert.deepEqual(registrations.commands.map((c) => c.name).sort(), ['cheer', 'cheer-at', 'sister', 'speak'])
+  assert.deepEqual(registrations.commands.map((c) => c.name).sort(), ['cheer', 'cheer-at', 'cheer-text', 'sister', 'speak'])
   assert.deepEqual(registrations.tools.map((t) => t.name).sort(), ['cheer', 'speak'])
   assert.equal(registrations.projections.length, 1)
   assert.equal(registrations.projections[0].key, 'sisterSpeak')
@@ -188,27 +188,65 @@ test('scheduler fires one cheer per due time per day, only into tracked sessions
   const schedulePath = join(smokeHomeDir, 'state', 'dsh-sister', 'schedule.json')
   const schedule = new CheerSchedule(schedulePath)
   const controller = new SisterController({ logger: { warn: () => {} } }, schedule)
-  // Track a session.
+  // Track a session (no followup → greet falls back to a direct cheer).
   const agent = { session: mockSession('s1') }
   controller.track(agent)
   // Set the schedule to the current minute.
   const now = new Date()
   const cur = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
   schedule.setTimes([cur])
-  assert.equal(controller.tick(), 1, 'one cheer fired into the one tracked session')
+  assert.equal(await controller.tick(), 1, 'one cheer fired into the one tracked session')
   const cheerEvt = agent.session.events.find((e) => e.type === 'sister/cheer')
   const spokenEvt = agent.session.events.find((e) => e.type === 'sister/spoken')
   assert.ok(cheerEvt && cheerEvt.data.text.length > 0)
   assert.ok(spokenEvt && spokenEvt.data.text === cheerEvt.data.text)
   // Same minute again → deduped (fired recorded).
-  assert.equal(controller.tick(), 0, 'no re-fire within the same day/minute')
+  assert.equal(await controller.tick(), 0, 'no re-fire within the same day/minute')
   // A tracked session that is not due still gets nothing.
   // The schedule still says cur; simulate a *new* day via a fresh controller
   // whose schedule file marks cur as already fired → nothing.
   const controller2 = new SisterController({ logger: { warn: () => {} } }, new CheerSchedule(schedulePath))
   const agent2 = { session: mockSession('s2') }
   controller2.track(agent2)
-  assert.equal(controller2.tick(), 0)
+  assert.equal(await controller2.tick(), 0)
+})
+
+test('greet nudges the sister via followup (model composes the welcome)', async () => {
+  const { SisterController, CheerSchedule } = await import('../index.js')
+  const schedulePath = join(smokeHomeDir, 'state', 'dsh-sister', 'greet.json')
+  const schedule = new CheerSchedule(schedulePath)
+  const controller = new SisterController({ logger: { warn: () => {} } }, schedule)
+  const followups = []
+  const agent = {
+    session: mockSession('s1'),
+    followup: (msg) => { followups.push(msg) },
+  }
+  controller.track(agent)
+  assert.equal(await controller.greet(agent), true)
+  assert.equal(followups.length, 1)
+  assert.equal(followups[0].role, 'user')
+  assert.equal(followups[0].content[0].type, 'text')
+  assert.match(followups[0].content[0].text, /欢迎回家/)
+  // No cheer event appended on the followup path (the model will reply).
+  assert.equal(agent.session.events.some((e) => e.type === 'sister/cheer'), false)
+})
+
+test('fixed cheer text is spoken verbatim instead of the model nudge', async () => {
+  const { SisterController, CheerSchedule } = await import('../index.js')
+  const schedulePath = join(smokeHomeDir, 'state', 'dsh-sister', 'fixed.json')
+  const schedule = new CheerSchedule(schedulePath)
+  schedule.setText('哥哥，欢迎回家')
+  const controller = new SisterController({ logger: { warn: () => {} } }, schedule)
+  const followups = []
+  const agent = {
+    session: mockSession('s1'),
+    followup: (msg) => { followups.push(msg) },
+  }
+  controller.track(agent)
+  assert.equal(await controller.greet(agent), true)
+  assert.equal(followups.length, 0, 'fixed text does not use the model')
+  const cheerEvt = agent.session.events.find((e) => e.type === 'sister/cheer')
+  assert.ok(cheerEvt && cheerEvt.data.text === '哥哥，欢迎回家')
 })
 
 test('schedule round-trips to disk (times + fired set survive)', async () => {
