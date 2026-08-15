@@ -59,10 +59,18 @@ function mockSession(id = 's1') {
   return session
 }
 
-function mockCtx() {
-  const registrations = { commands: [], tools: [], events: {}, projections: [] }
+function mockCtx(opts = {}) {
+  const registrations = { commands: [], tools: [], events: {}, projections: [], webRoutes: [] }
+  const webServer = opts.webServer === true
+    ? {
+        register: (route) => {
+          registrations.webRoutes.push(route)
+          return () => {}
+        },
+      }
+    : undefined
   const ctx = {
-    get: () => undefined,
+    get: (key) => (key === 'webServer' ? webServer : undefined),
     on(name, fn) {
       ;(registrations.events[name] ??= []).push(fn)
     },
@@ -213,4 +221,34 @@ test('schedule round-trips to disk (times + fired set survive)', async () => {
   assert.deepEqual(b.times, ['07:15', '19:45'])
   assert.equal(b.firedToday('2026-08-15', '07:15'), true)
   assert.equal(b.firedToday('2026-08-15', '19:45'), false)
+})
+
+test('registers the TTS proxy routes when a web server is present', async () => {
+  const { apply } = await import('../index.js')
+  const { ctx, registrations } = mockCtx({ webServer: true })
+  await apply(ctx)
+  dispose(ctx)
+  const paths = registrations.webRoutes.map((r) => r.path)
+  assert.ok(paths.includes('/dsh-sister/tts'))
+  assert.ok(paths.includes('/dsh-sister/tts-health'))
+  const tts = registrations.webRoutes.find((r) => r.path === '/dsh-sister/tts')
+  assert.equal(tts.kind, 'exact')
+  assert.equal(typeof tts.handler, 'function')
+})
+
+test('TTS proxy rejects a request without text', async () => {
+  const { apply } = await import('../index.js')
+  const { ctx, registrations } = mockCtx({ webServer: true })
+  await apply(ctx)
+  dispose(ctx)
+  const tts = registrations.webRoutes.find((r) => r.path === '/dsh-sister/tts')
+  let status = 0
+  let body = ''
+  const res = {
+    writeHead: (s) => { status = s },
+    end: (b) => { body = b },
+  }
+  await tts.handler({ url: '/dsh-sister/tts?instruct=x' }, res)
+  assert.equal(status, 400)
+  assert.match(body, /text is required/)
 })
