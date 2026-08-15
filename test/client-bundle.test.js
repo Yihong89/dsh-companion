@@ -87,7 +87,9 @@ test('speak toggle renders only in sister sessions', () => {
     useSessions: (sel) => sel({ byId: { s1: { agentPreset: 'sister' } } }),
   }))
   assert.ok(sister !== null)
-  assert.equal(sister.type, 'button')
+  assert.equal(sister.type, 'div')
+  const buttons = sister.children.filter((c) => c && c.type === 'button')
+  assert.equal(buttons.length, 2, 'voice picker + speak toggle')
 })
 
 test('assistantNodeText reads harness blocks by kind, skipping reasoning', () => {
@@ -146,4 +148,50 @@ test('speakable strips markdown markup for clean speech', () => {
   assert.equal(speakable('**You are awesome!** ✅'), 'You are awesome! ✅')
   assert.equal(speakable('[link](https://x) text'), 'link text')
   assert.equal(speakable('a  b\nc'), 'a b c')
+})
+
+test('pickVoice prefers the best soft voice, not the first pool match', () => {
+  const { moduleObj } = loadBundle()
+  const { pickVoice } = moduleObj._test
+  const voices = [
+    { name: 'Karen', lang: 'en-AU' },
+    { name: 'Aaron', lang: 'en-US' },
+    { name: 'Samantha', lang: 'en-US' },
+  ]
+  globalThis.window.speechSynthesis = { getVoices: () => voices }
+  // Karen appears first in the pool, but Samantha is the preferred soft voice.
+  assert.equal(pickVoice('en').name, 'Samantha')
+  delete globalThis.window.speechSynthesis
+})
+
+test('pickVoice honors a saved voice preference', () => {
+  const { moduleObj } = loadBundle()
+  const { pickVoice } = moduleObj._test
+  const voices = [
+    { name: 'Karen', lang: 'en-AU' },
+    { name: 'Samantha', lang: 'en-US' },
+  ]
+  globalThis.window.speechSynthesis = { getVoices: () => voices }
+  globalThis.window.localStorage = {
+    getItem: () => 'Karen',
+    setItem: () => {},
+  }
+  assert.equal(pickVoice('en').name, 'Karen')
+  delete globalThis.window.speechSynthesis
+  delete globalThis.window.localStorage
+})
+
+test('nextVoice cycles forward through the language pool', () => {
+  const { moduleObj } = loadBundle()
+  const { nextVoice } = moduleObj._test
+  const voices = [
+    { name: 'A', lang: 'en-US' },
+    { name: 'B', lang: 'en-US' },
+    { name: 'C', lang: 'en-US' },
+  ]
+  globalThis.window.speechSynthesis = { getVoices: () => voices }
+  assert.equal(nextVoice('en', 'A').name, 'B')
+  assert.equal(nextVoice('en', 'C').name, 'A')
+  assert.equal(nextVoice('en', null).name, 'A')
+  delete globalThis.window.speechSynthesis
 })
