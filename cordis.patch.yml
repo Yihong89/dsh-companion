@@ -1,0 +1,14 @@
+# dsh-sister bundle patch — INTENTIONALLY EMPTY.
+#
+# Installing this package into a profile joins the bundle layer but inserts NO
+# plugin row, so dsh-sister never activates profile-wide and no existing agent
+# sees its tools. It activates only where an explicit row is composed — i.e. in
+# an agent preset that opts in (see the "sister" preset: a row with
+# `name: dsh-sister`).
+#
+# To opt a profile in globally (not recommended), uncomment the insert below:
+#
+# - insert:
+#     - id: dsh-sister
+#       name: dsh-sister
+[]
