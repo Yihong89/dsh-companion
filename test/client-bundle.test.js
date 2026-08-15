@@ -152,21 +152,49 @@ test('speakable strips markdown markup for clean speech', () => {
 
 test('pickVoice prefers the best soft voice, not the first pool match', () => {
   const { moduleObj } = loadBundle()
-  const { pickVoice } = moduleObj._test
+  const { pickVoice, refreshVoiceCache } = moduleObj._test
   const voices = [
     { name: 'Karen', lang: 'en-AU' },
     { name: 'Aaron', lang: 'en-US' },
     { name: 'Samantha', lang: 'en-US' },
   ]
   globalThis.window.speechSynthesis = { getVoices: () => voices }
+  refreshVoiceCache()
   // Karen appears first in the pool, but Samantha is the preferred soft voice.
   assert.equal(pickVoice('en').name, 'Samantha')
   delete globalThis.window.speechSynthesis
 })
 
+test('pickVoice prefers Chinese soft-girl voices for zh text', () => {
+  const { moduleObj } = loadBundle()
+  const { pickVoice, refreshVoiceCache } = moduleObj._test
+  const voices = [
+    { name: 'Tingting', lang: 'zh-CN' },
+    { name: 'Daniel', lang: 'zh-CN' },
+  ]
+  globalThis.window.speechSynthesis = { getVoices: () => voices }
+  refreshVoiceCache()
+  assert.equal(pickVoice('zh').name, 'Tingting')
+  delete globalThis.window.speechSynthesis
+})
+
+test('pickVoice falls back across languages when the wanted one is absent', () => {
+  const { moduleObj } = loadBundle()
+  const { pickVoice, refreshVoiceCache } = moduleObj._test
+  const voices = [
+    { name: 'Karen', lang: 'en-AU' },
+    { name: 'Samantha', lang: 'en-US' },
+  ]
+  globalThis.window.speechSynthesis = { getVoices: () => voices }
+  refreshVoiceCache()
+  // zh text, no zh voices → falls back to the softest en female.
+  assert.equal(pickVoice('zh').name, 'Samantha')
+  delete globalThis.window.speechSynthesis
+})
+
 test('pickVoice honors a saved voice preference', () => {
   const { moduleObj } = loadBundle()
-  const { pickVoice } = moduleObj._test
+  const { pickVoice, refreshVoiceCache } = moduleObj._test
   const voices = [
     { name: 'Karen', lang: 'en-AU' },
     { name: 'Samantha', lang: 'en-US' },
@@ -176,6 +204,7 @@ test('pickVoice honors a saved voice preference', () => {
     getItem: () => 'Karen',
     setItem: () => {},
   }
+  refreshVoiceCache()
   assert.equal(pickVoice('en').name, 'Karen')
   delete globalThis.window.speechSynthesis
   delete globalThis.window.localStorage
@@ -183,15 +212,39 @@ test('pickVoice honors a saved voice preference', () => {
 
 test('nextVoice cycles forward through the language pool', () => {
   const { moduleObj } = loadBundle()
-  const { nextVoice } = moduleObj._test
+  const { nextVoice, refreshVoiceCache } = moduleObj._test
   const voices = [
     { name: 'A', lang: 'en-US' },
     { name: 'B', lang: 'en-US' },
     { name: 'C', lang: 'en-US' },
   ]
   globalThis.window.speechSynthesis = { getVoices: () => voices }
+  refreshVoiceCache()
   assert.equal(nextVoice('en', 'A').name, 'B')
   assert.equal(nextVoice('en', 'C').name, 'A')
   assert.equal(nextVoice('en', null).name, 'A')
+  delete globalThis.window.speechSynthesis
+})
+
+test('previewPhrase matches the voice language', () => {
+  const { moduleObj } = loadBundle()
+  const { previewPhrase } = moduleObj._test
+  assert.match(previewPhrase({ lang: 'zh-CN' }), /嗨嗨/)
+  assert.match(previewPhrase({ lang: 'en-US' }), /Hi hi/)
+  assert.match(previewPhrase({ lang: 'fr-FR' }), /Hi there/)
+})
+
+test('sortVoicesForPicker groups Chinese first, then English', () => {
+  const { moduleObj } = loadBundle()
+  const { sortVoicesForPicker, refreshVoiceCache } = moduleObj._test
+  const voices = [
+    { name: 'Samantha', lang: 'en-US' },
+    { name: 'Tingting', lang: 'zh-CN' },
+    { name: 'Amélie', lang: 'fr-FR' },
+  ]
+  globalThis.window.speechSynthesis = { getVoices: () => voices }
+  refreshVoiceCache()
+  const sorted = sortVoicesForPicker().map((v) => v.name)
+  assert.deepEqual(sorted, ['Tingting', 'Samantha', 'Amélie'])
   delete globalThis.window.speechSynthesis
 })
