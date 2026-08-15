@@ -16,7 +16,18 @@ function evalBundle(source) {
   let captured = null
   globalThis.window = {
     __ModuleLoader__: { load: (def) => { captured = def } },
+    // speakBrowser guards on `typeof window.fetch === 'function'` but then
+    // calls the bare `fetch(...)`, which resolves via globalThis. Keep this
+    // truthy so the guard passes.
+    fetch: () => {},
   }
+  // This harness never invokes a useEffect's returned cleanup (there is no
+  // real unmount/reconciliation here), so voice.watchQueue's setInterval
+  // (started unconditionally whenever SpeakToggle renders with isVoice
+  // true — see dsh-voice-core/lib/client.js) would leak a live timer past
+  // the end of whichever test renders it. Default to a safe no-op.
+  globalThis.setInterval = () => 0
+  globalThis.clearInterval = () => {}
   // eslint-disable-next-line no-eval
   ;(0, eval)(source)
   if (captured === null) throw new Error('bundle did not call __ModuleLoader__.load')
@@ -77,7 +88,7 @@ test('apply registers the speak toggle, cheer chip, and style picker', () => {
   const speakBtn = entries.find((e) => e.slot === 'conversation.input.right' && e.register().opts.id === 'dsh-voice-sister-speak')
   assert.ok(speakBtn, 'sister speak toggle registered')
   const overlays = entries.filter((e) => e.slot === 'shell.overlay').map((e) => e.register().opts.id).sort()
-  assert.deepEqual(overlays, ['dsh-voice-sister-cheer-chip', 'dsh-voice-sister-style-picker'])
+  assert.deepEqual(overlays, ['dsh-voice-sister-background', 'dsh-voice-sister-cheer-chip', 'dsh-voice-sister-hear-full', 'dsh-voice-sister-style-picker'])
 })
 
 test('speak toggle renders only in sister sessions', () => {

@@ -4,12 +4,20 @@
  * All voice machinery (Qwen3-TTS proxy, speak/cheer tools, voiceSpeak
  * projection, daily greeting scheduler, commands) lives in dsh-voice-core;
  * this plugin only configures it for the sister persona and keeps the
- * backward-compatible exports used by tests / existing presets.
+ * backward-compatible exports used by tests / existing presets. It also
+ * serves its own backdrop image (dsh-voice-core's BackgroundLayer just
+ * renders whatever URL it is given — sourcing/serving that asset is a
+ * per-consumer concern, since only sister wants one right now).
  *
  * @module dsh-sister
  */
+import { readFile } from 'node:fs/promises'
+import { fileURLToPath } from 'node:url'
 import { applyVoice, normalizeConfig, VoiceController, VoiceSchedule, TICK_MS } from 'dsh-voice-core'
 import { DEFAULT_STYLES } from 'dsh-voice-core'
+
+const BACKGROUND_PATH = '/dsh-sister/background.jpg'
+const BACKGROUND_FILE = fileURLToPath(new URL('./assets/background.jpg', import.meta.url))
 
 export const name = 'dsh-sister'
 
@@ -46,6 +54,25 @@ export async function apply(ctx) {
       '（定时问候）现在是下午 3 点，哥哥应该快回家了。请先用 cheer 工具送上一句温暖的欢迎回家问候，并顺带分享一个有趣的小知识或今天的小新闻（可以用网络搜索），一两句话就好，说完请哥哥先休息放松。',
   })
   ctx.logger?.info?.(`dsh-sister: activated via dsh-voice-core — daily greetings at ${controller.schedule.times.join(', ')}, fixed text: ${controller.schedule.text ? `"${controller.schedule.text}"` : 'auto'}`)
+
+  const webServer = ctx.get('webServer')
+  if (webServer !== undefined && typeof webServer.register === 'function') {
+    webServer.register({
+      kind: 'exact',
+      path: BACKGROUND_PATH,
+      handler: async (_req, res) => {
+        try {
+          const buf = await readFile(BACKGROUND_FILE)
+          res.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'public, max-age=604800, immutable' })
+          res.end(buf)
+        } catch (error) {
+          ctx.logger?.warn?.(`dsh-sister: background image unreadable: ${error}`)
+          res.writeHead(404, { 'content-type': 'text/plain' })
+          res.end('not found')
+        }
+      },
+    })
+  }
   // Cordis treats a plugin's `apply` return value as an "effect" (dispose
   // function, promise, or iterable of those) — returning the arbitrary
   // VoiceController object here throws `TypeError: Invalid effect` when the

@@ -282,6 +282,28 @@ test('registers the TTS proxy routes when a web server is present', async () => 
   assert.equal(typeof tts.handler, 'function')
 })
 
+test('serves the background image at /dsh-sister/background.jpg', async () => {
+  const { apply } = await import('../index.js')
+  const { ctx, registrations } = mockCtx({ webServer: true })
+  await apply(ctx)
+  dispose(ctx)
+  const route = registrations.webRoutes.find((r) => r.path === '/dsh-sister/background.jpg')
+  assert.ok(route, 'the background route is registered')
+  assert.equal(route.kind, 'exact')
+
+  let status = 0
+  let headers = {}
+  let body = null
+  const res = {
+    writeHead: (s, h) => { status = s; headers = h },
+    end: (b) => { body = b },
+  }
+  await route.handler({}, res)
+  assert.equal(status, 200)
+  assert.equal(headers['content-type'], 'image/jpeg')
+  assert.ok(Buffer.isBuffer(body) && body.length > 0, 'serves the actual image bytes')
+})
+
 test('TTS proxy rejects a request without text', async () => {
   const { apply } = await import('../index.js')
   const { ctx, registrations } = mockCtx({ webServer: true })
