@@ -1,0 +1,34 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    dependencies:
+      dsh-voice-core:
+        specifier: github:Yihong89/dsh-voice-core
+        version: https://codeload.github.com/Yihong89/dsh-voice-core/tar.gz/088916ff1d48144c92910494aefa3c15d7d96e67
+      zod:
+        specifier: ^4.0.0
+        version: 4.4.3
+
+packages:
+
+  dsh-voice-core@https://codeload.github.com/Yihong89/dsh-voice-core/tar.gz/088916ff1d48144c92910494aefa3c15d7d96e67:
+    resolution: {gitHosted: true, integrity: sha512-hu88IV5cUc3LwcMOO3SCEyDl/dlqtJagEyAE02JxhvcNNsyKLvKKf/nZeNfDPBHdVt0jPsXtT6evGHxzd8dH8w==, tarball: https://codeload.github.com/Yihong89/dsh-voice-core/tar.gz/088916ff1d48144c92910494aefa3c15d7d96e67}
+    version: 0.1.0
+    engines: {node: '>=22.5.0'}
+
+  zod@4.4.3:
+    resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
+
+snapshots:
+
+  dsh-voice-core@https://codeload.github.com/Yihong89/dsh-voice-core/tar.gz/088916ff1d48144c92910494aefa3c15d7d96e67:
+    dependencies:
+      zod: 4.4.3
+
+  zod@4.4.3: {}

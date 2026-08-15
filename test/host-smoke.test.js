@@ -113,10 +113,10 @@ test('host plugin registers commands, tools, and the sisterSpeak projection', as
   const { ctx, registrations } = mockCtx()
   await apply(ctx)
   dispose(ctx)
-  assert.deepEqual(registrations.commands.map((c) => c.name).sort(), ['cheer', 'cheer-at', 'cheer-text', 'sister', 'speak'])
+  assert.deepEqual(registrations.commands.map((c) => c.name).sort(), ['cheer', 'cheer-at', 'cheer-text', 'speak', 'voice'])
   assert.deepEqual(registrations.tools.map((t) => t.name).sort(), ['cheer', 'speak'])
   assert.equal(registrations.projections.length, 1)
-  assert.equal(registrations.projections[0].key, 'sisterSpeak')
+  assert.equal(registrations.projections[0].key, 'voiceSpeak')
   assert.ok(registrations.events['agent/session-start'])
   assert.ok(registrations.events['agent/pre-step'])
   assert.ok(registrations.events['dispose'])
@@ -124,9 +124,9 @@ test('host plugin registers commands, tools, and the sisterSpeak projection', as
 
 test('session event types are registered into the catalog', async () => {
   const { KNOWN_SESSION_EVENT_TYPES } = await import('@deepseek-ai/dsh-session')
-  assert.ok(KNOWN_SESSION_EVENT_TYPES.has('sister/speak'))
-  assert.ok(KNOWN_SESSION_EVENT_TYPES.has('sister/spoken'))
-  assert.ok(KNOWN_SESSION_EVENT_TYPES.has('sister/cheer'))
+  assert.ok(KNOWN_SESSION_EVENT_TYPES.has('voice/speak'))
+  assert.ok(KNOWN_SESSION_EVENT_TYPES.has('voice/spoken'))
+  assert.ok(KNOWN_SESSION_EVENT_TYPES.has('voice/cheer'))
 })
 
 test('speak command toggles TTS and speaks arbitrary text', async () => {
@@ -145,7 +145,7 @@ test('speak command toggles TTS and speaks arbitrary text', async () => {
   // arbitrary text → spoken event
   const spoken = await speak.handler({ agent, rawInput: 'You are amazing!' })
   assert.match(spoken.text, /Speaking/)
-  const spokenEvt = agent.session.events.find((e) => e.type === 'sister/spoken')
+  const spokenEvt = agent.session.events.find((e) => e.type === 'voice/spoken')
   assert.equal(spokenEvt.data.text, 'You are amazing!')
 })
 
@@ -158,8 +158,8 @@ test('cheer command fires a cheer event with a bank default', async () => {
   const agent = { session: mockSession() }
   const res = await cheer.handler({ agent, rawInput: '' })
   assert.match(res.text, /Cheer sent/)
-  assert.ok(agent.session.events.some((e) => e.type === 'sister/cheer'))
-  assert.ok(agent.session.events.some((e) => e.type === 'sister/spoken'))
+  assert.ok(agent.session.events.some((e) => e.type === 'voice/cheer'))
+  assert.ok(agent.session.events.some((e) => e.type === 'voice/spoken'))
 })
 
 test('cheer-at validates and persists times', async () => {
@@ -178,16 +178,16 @@ test('cheer-at validates and persists times', async () => {
   const { ctx: ctx2, registrations: reg2 } = mockCtx()
   await (await import('../index.js')).apply(ctx2)
   dispose(ctx2)
-  const sister = reg2.commands.find((c) => c.name === 'sister')
-  const status = await sister.handler({ agent, rawInput: '' })
+  const voice = reg2.commands.find((c) => c.name === 'voice')
+  const status = await voice.handler({ agent, rawInput: '' })
   assert.match(status.text, /08:00, 17:30/)
 })
 
 test('scheduler fires one cheer per due time per day, only into tracked sessions', async () => {
-  const { SisterController, CheerSchedule } = await import('../index.js')
+  const { VoiceController, VoiceSchedule } = await import('../index.js')
   const schedulePath = join(smokeHomeDir, 'state', 'dsh-sister', 'schedule.json')
-  const schedule = new CheerSchedule(schedulePath)
-  const controller = new SisterController({ logger: { warn: () => {} } }, schedule)
+  const schedule = new VoiceSchedule(schedulePath)
+  const controller = new VoiceController({ logger: { warn: () => {} } }, schedule, { greetingPrompt: '欢迎回家+趣闻' })
   // Track a session (no followup → greet falls back to a direct cheer).
   const agent = { session: mockSession('s1') }
   controller.track(agent)
@@ -196,8 +196,8 @@ test('scheduler fires one cheer per due time per day, only into tracked sessions
   const cur = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
   schedule.setTimes([cur])
   assert.equal(await controller.tick(), 1, 'one cheer fired into the one tracked session')
-  const cheerEvt = agent.session.events.find((e) => e.type === 'sister/cheer')
-  const spokenEvt = agent.session.events.find((e) => e.type === 'sister/spoken')
+  const cheerEvt = agent.session.events.find((e) => e.type === 'voice/cheer')
+  const spokenEvt = agent.session.events.find((e) => e.type === 'voice/spoken')
   assert.ok(cheerEvt && cheerEvt.data.text.length > 0)
   assert.ok(spokenEvt && spokenEvt.data.text === cheerEvt.data.text)
   // Same minute again → deduped (fired recorded).
@@ -205,17 +205,17 @@ test('scheduler fires one cheer per due time per day, only into tracked sessions
   // A tracked session that is not due still gets nothing.
   // The schedule still says cur; simulate a *new* day via a fresh controller
   // whose schedule file marks cur as already fired → nothing.
-  const controller2 = new SisterController({ logger: { warn: () => {} } }, new CheerSchedule(schedulePath))
+  const controller2 = new VoiceController({ logger: { warn: () => {} } }, new VoiceSchedule(schedulePath), { greetingPrompt: 'x' })
   const agent2 = { session: mockSession('s2') }
   controller2.track(agent2)
   assert.equal(await controller2.tick(), 0)
 })
 
 test('greet nudges the sister via followup (model composes the welcome)', async () => {
-  const { SisterController, CheerSchedule } = await import('../index.js')
+  const { VoiceController, VoiceSchedule } = await import('../index.js')
   const schedulePath = join(smokeHomeDir, 'state', 'dsh-sister', 'greet.json')
-  const schedule = new CheerSchedule(schedulePath)
-  const controller = new SisterController({ logger: { warn: () => {} } }, schedule)
+  const schedule = new VoiceSchedule(schedulePath)
+  const controller = new VoiceController({ logger: { warn: () => {} } }, schedule, { greetingPrompt: '（定时问候）欢迎回家+趣闻' })
   const followups = []
   const agent = {
     session: mockSession('s1'),
@@ -228,15 +228,15 @@ test('greet nudges the sister via followup (model composes the welcome)', async 
   assert.equal(followups[0].content[0].type, 'text')
   assert.match(followups[0].content[0].text, /欢迎回家/)
   // No cheer event appended on the followup path (the model will reply).
-  assert.equal(agent.session.events.some((e) => e.type === 'sister/cheer'), false)
+  assert.equal(agent.session.events.some((e) => e.type === 'voice/cheer'), false)
 })
 
 test('fixed cheer text is spoken verbatim instead of the model nudge', async () => {
-  const { SisterController, CheerSchedule } = await import('../index.js')
+  const { VoiceController, VoiceSchedule } = await import('../index.js')
   const schedulePath = join(smokeHomeDir, 'state', 'dsh-sister', 'fixed.json')
-  const schedule = new CheerSchedule(schedulePath)
+  const schedule = new VoiceSchedule(schedulePath)
   schedule.setText('哥哥，欢迎回家')
-  const controller = new SisterController({ logger: { warn: () => {} } }, schedule)
+  const controller = new VoiceController({ logger: { warn: () => {} } }, schedule)
   const followups = []
   const agent = {
     session: mockSession('s1'),
@@ -245,17 +245,17 @@ test('fixed cheer text is spoken verbatim instead of the model nudge', async () 
   controller.track(agent)
   assert.equal(await controller.greet(agent), true)
   assert.equal(followups.length, 0, 'fixed text does not use the model')
-  const cheerEvt = agent.session.events.find((e) => e.type === 'sister/cheer')
+  const cheerEvt = agent.session.events.find((e) => e.type === 'voice/cheer')
   assert.ok(cheerEvt && cheerEvt.data.text === '哥哥，欢迎回家')
 })
 
 test('schedule round-trips to disk (times + fired set survive)', async () => {
-  const { CheerSchedule } = await import('../index.js')
+  const { VoiceSchedule } = await import('../index.js')
   const schedulePath = join(smokeHomeDir, 'state', 'dsh-sister', 'roundtrip.json')
-  const a = new CheerSchedule(schedulePath)
+  const a = new VoiceSchedule(schedulePath)
   a.setTimes(['07:15', '19:45'])
   a.markFired('2026-08-15', '07:15')
-  const b = new CheerSchedule(schedulePath)
+  const b = new VoiceSchedule(schedulePath)
   assert.deepEqual(b.times, ['07:15', '19:45'])
   assert.equal(b.firedToday('2026-08-15', '07:15'), true)
   assert.equal(b.firedToday('2026-08-15', '19:45'), false)

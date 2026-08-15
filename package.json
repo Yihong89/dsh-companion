@@ -33,6 +33,7 @@
     "motivation"
   ],
   "dependencies": {
+    "dsh-voice-core": "github:Yihong89/dsh-voice-core",
     "zod": "^4.0.0"
   },
   "dsh": {
