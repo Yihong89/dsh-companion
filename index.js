@@ -253,6 +253,10 @@ export async function apply(ctx) {
     return next()
   })
 
+  // Start the daily cheer scheduler and log so we can confirm activation.
+  controller.start()
+  ctx.logger?.info?.(`dsh-sister: activated — daily cheers at ${schedule.times.join(', ')}, fixed text: ${schedule.text ? `"${schedule.text}"` : 'auto'}`)
+
   // Session projection: fold sister/speak + sister/spoken + sister/cheer so
   // the Web client drives browser TTS and the cheer chip via
   // useProjection('sisterSpeak').
@@ -269,7 +273,6 @@ export async function apply(ctx) {
   })
 
   // Daily cheer scheduler: fire once per configured time per day.
-  controller.start()
   ctx.on('dispose', () => controller.stop())
 
   // ---- TTS proxy -----------------------------------------------------------
