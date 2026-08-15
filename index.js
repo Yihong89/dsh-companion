@@ -46,5 +46,9 @@ export async function apply(ctx) {
       '（定时问候）现在是下午 3 点，哥哥应该快回家了。请先用 cheer 工具送上一句温暖的欢迎回家问候，并顺带分享一个有趣的小知识或今天的小新闻（可以用网络搜索），一两句话就好，说完请哥哥先休息放松。',
   })
   ctx.logger?.info?.(`dsh-sister: activated via dsh-voice-core — daily greetings at ${controller.schedule.times.join(', ')}, fixed text: ${controller.schedule.text ? `"${controller.schedule.text}"` : 'auto'}`)
-  return controller
+  // Cordis treats a plugin's `apply` return value as an "effect" (dispose
+  // function, promise, or iterable of those) — returning the arbitrary
+  // VoiceController object here throws `TypeError: Invalid effect` when the
+  // real fiber runner applies this plugin (host-smoke tests use a mock ctx
+  // that never noticed). No return value needed; nothing consumes it.
 }

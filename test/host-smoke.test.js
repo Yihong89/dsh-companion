@@ -108,6 +108,14 @@ after(() => {
   rmSync(smokeHomeDir, { recursive: true, force: true })
 })
 
+test('apply resolves to undefined (cordis treats a plugin\'s return value as an effect; anything else throws "Invalid effect" in the real fiber runner)', async () => {
+  const { apply } = await import('../index.js')
+  const { ctx } = mockCtx()
+  const result = await apply(ctx)
+  dispose(ctx)
+  assert.equal(result, undefined)
+})
+
 test('host plugin registers commands, tools, and the sisterSpeak projection', async () => {
   const { apply } = await import('../index.js')
   const { ctx, registrations } = mockCtx()
