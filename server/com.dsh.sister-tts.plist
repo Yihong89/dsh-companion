@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.dsh.sister-tts</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/robot/qwen-tts-venv/bin/python</string>
+        <string>/Users/robot/tts_service.py</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/robot</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>HF_HOME</key>
+        <string>/Users/robot/.cache/huggingface</string>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/Users/robot/dsh-sister-tts.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/robot/dsh-sister-tts.log</string>
+</dict>
+</plist>
