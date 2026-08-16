@@ -10,7 +10,7 @@ importers:
     dependencies:
       dsh-voice-core:
         specifier: github:Yihong89/dsh-voice-core
-        version: https://codeload.github.com/Yihong89/dsh-voice-core/tar.gz/f9e7533c8f9e8531e4544f1412f2839fd5e79e89(@deepseek-ai/dsh-session@0.1.0-rc.6(6fd26f59436a18b115f326d6060415e6))(@deepseek-ai/dsh-tools@0.1.0-rc.6(f8724372086ccc1457fc84e7becee2e0))
+        version: https://codeload.github.com/Yihong89/dsh-voice-core/tar.gz/1815926643a40c5e5253d3deec68aa5623dec5c9(@deepseek-ai/dsh-session@0.1.0-rc.6(6fd26f59436a18b115f326d6060415e6))(@deepseek-ai/dsh-tools@0.1.0-rc.6(f8724372086ccc1457fc84e7becee2e0))
       zod:
         specifier: ^4.0.0
         version: 4.4.3
@@ -143,8 +143,8 @@ packages:
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
 
-  dsh-voice-core@https://codeload.github.com/Yihong89/dsh-voice-core/tar.gz/f9e7533c8f9e8531e4544f1412f2839fd5e79e89:
-    resolution: {gitHosted: true, integrity: sha512-eRqsBNaYGCMy3eQ7vk9UIrFBPnSpe2/tJXCopR3DWdjcuuFw7iELDHAredgkzB1bL4XGeB2IvmlOv8W60Tf6rw==, tarball: https://codeload.github.com/Yihong89/dsh-voice-core/tar.gz/f9e7533c8f9e8531e4544f1412f2839fd5e79e89}
+  dsh-voice-core@https://codeload.github.com/Yihong89/dsh-voice-core/tar.gz/1815926643a40c5e5253d3deec68aa5623dec5c9:
+    resolution: {gitHosted: true, integrity: sha512-uby6dReAneZIlXwfbH73obPojJqgf/4QgT4SPHrzPsvucNehBc7MlWSvkgJUGUdB4eDYxDA8Nfv4VgFUxQOzmg==, tarball: https://codeload.github.com/Yihong89/dsh-voice-core/tar.gz/1815926643a40c5e5253d3deec68aa5623dec5c9}
     version: 0.1.0
     engines: {node: '>=22.5.0'}
     peerDependencies:
@@ -267,7 +267,7 @@ snapshots:
 
   '@standard-schema/spec@1.1.0': {}
 
-  dsh-voice-core@https://codeload.github.com/Yihong89/dsh-voice-core/tar.gz/f9e7533c8f9e8531e4544f1412f2839fd5e79e89(@deepseek-ai/dsh-session@0.1.0-rc.6(6fd26f59436a18b115f326d6060415e6))(@deepseek-ai/dsh-tools@0.1.0-rc.6(f8724372086ccc1457fc84e7becee2e0)):
+  dsh-voice-core@https://codeload.github.com/Yihong89/dsh-voice-core/tar.gz/1815926643a40c5e5253d3deec68aa5623dec5c9(@deepseek-ai/dsh-session@0.1.0-rc.6(6fd26f59436a18b115f326d6060415e6))(@deepseek-ai/dsh-tools@0.1.0-rc.6(f8724372086ccc1457fc84e7becee2e0)):
     dependencies:
       '@deepseek-ai/dsh-session': 0.1.0-rc.6(6fd26f59436a18b115f326d6060415e6)
       '@deepseek-ai/dsh-tools': 0.1.0-rc.6(f8724372086ccc1457fc84e7becee2e0)
