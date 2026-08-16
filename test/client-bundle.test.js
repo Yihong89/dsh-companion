@@ -88,7 +88,7 @@ test('apply registers the speak toggle and style picker', () => {
   const speakBtn = entries.find((e) => e.slot === 'conversation.input.right' && e.register().opts.id === 'dsh-voice-sister-speak')
   assert.ok(speakBtn, 'sister speak toggle registered')
   const overlays = entries.filter((e) => e.slot === 'shell.overlay').map((e) => e.register().opts.id).sort()
-  assert.deepEqual(overlays, ['dsh-voice-sister-background', 'dsh-voice-sister-hear-full', 'dsh-voice-sister-style-picker'])
+  assert.deepEqual(overlays, ['dsh-voice-sister-background', 'dsh-voice-sister-style-picker'])
 })
 
 test('speak toggle renders only in sister sessions', () => {
