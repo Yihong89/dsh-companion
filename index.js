@@ -5,19 +5,33 @@
  * projection, daily greeting scheduler, commands) lives in dsh-voice-core;
  * this plugin only configures it for the sister persona and keeps the
  * backward-compatible exports used by tests / existing presets. It also
- * serves its own backdrop image (dsh-voice-core's BackgroundLayer just
- * renders whatever URL it is given — sourcing/serving that asset is a
- * per-consumer concern, since only sister wants one right now).
+ * serves its own backdrop image and pre-baked cheer-bank audio
+ * (dsh-voice-core's BackgroundLayer/cheer-audio matching just render/play
+ * whatever URL they're given — sourcing/serving those assets is a
+ * per-consumer concern, since only sister wants them right now).
  *
  * @module dsh-sister
  */
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { applyVoice, normalizeConfig, VoiceController, VoiceSchedule, TICK_MS } from 'dsh-voice-core'
-import { DEFAULT_STYLES } from 'dsh-voice-core'
+import { DEFAULT_STYLES, DEFAULT_CHEERS } from 'dsh-voice-core'
 
 const BACKGROUND_PATH = '/dsh-sister/background.jpg'
 const BACKGROUND_FILE = fileURLToPath(new URL('./assets/background.jpg', import.meta.url))
+
+// Pre-baked audio for the fixed DEFAULT_CHEERS bank (see
+// scripts/generate-cheer-audio.mjs) — one clip per bank entry, in the
+// SAME order, spoken in the default (paimon) voice. Served as static
+// files so a fired cheer never has to touch the live TTS backend; see
+// dsh-voice-core's opts.cheerAudioManifestUrl.
+const CHEER_AUDIO_DIR = fileURLToPath(new URL('./assets/cheer-audio/', import.meta.url))
+const CHEER_AUDIO_PREFIX = '/dsh-sister/cheer-audio/'
+const CHEER_AUDIO_MANIFEST_PATH = CHEER_AUDIO_PREFIX + 'manifest.json'
+const CHEER_AUDIO_FILES = DEFAULT_CHEERS.map((text, i) => ({
+  text,
+  file: `${String(i).padStart(2, '0')}.m4a`,
+}))
 
 export const name = 'dsh-sister'
 
@@ -72,6 +86,35 @@ export async function apply(ctx) {
         }
       },
     })
+
+    webServer.register({
+      kind: 'exact',
+      path: CHEER_AUDIO_MANIFEST_PATH,
+      handler: (_req, res) => {
+        const manifest = Object.fromEntries(CHEER_AUDIO_FILES.map((e) => [e.text, CHEER_AUDIO_PREFIX + e.file]))
+        const body = JSON.stringify(manifest)
+        res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'public, max-age=604800' })
+        res.end(body)
+      },
+    })
+    for (const { file } of CHEER_AUDIO_FILES) {
+      const filePath = fileURLToPath(new URL(`./assets/cheer-audio/${file}`, import.meta.url))
+      webServer.register({
+        kind: 'exact',
+        path: CHEER_AUDIO_PREFIX + file,
+        handler: async (_req, res) => {
+          try {
+            const buf = await readFile(filePath)
+            res.writeHead(200, { 'content-type': 'audio/mp4', 'cache-control': 'public, max-age=604800, immutable' })
+            res.end(buf)
+          } catch (error) {
+            ctx.logger?.warn?.(`dsh-sister: cheer audio ${file} unreadable: ${error}`)
+            res.writeHead(404, { 'content-type': 'text/plain' })
+            res.end('not found')
+          }
+        },
+      })
+    }
   }
   // Cordis treats a plugin's `apply` return value as an "effect" (dispose
   // function, promise, or iterable of those) — returning the arbitrary

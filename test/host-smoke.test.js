@@ -304,6 +304,55 @@ test('serves the background image at /dsh-sister/background.jpg', async () => {
   assert.ok(Buffer.isBuffer(body) && body.length > 0, 'serves the actual image bytes')
 })
 
+test('serves a cheer-audio manifest mapping every DEFAULT_CHEERS entry to a static clip URL', async () => {
+  const { apply } = await import('../index.js')
+  const { DEFAULT_CHEERS } = await import('dsh-voice-core')
+  const { ctx, registrations } = mockCtx({ webServer: true })
+  await apply(ctx)
+  dispose(ctx)
+  const route = registrations.webRoutes.find((r) => r.path === '/dsh-sister/cheer-audio/manifest.json')
+  assert.ok(route, 'the cheer-audio manifest route is registered')
+  assert.equal(route.kind, 'exact')
+
+  let status = 0
+  let headers = {}
+  let body = null
+  const res = {
+    writeHead: (s, h) => { status = s; headers = h },
+    end: (b) => { body = b },
+  }
+  route.handler({}, res)
+  assert.equal(status, 200)
+  assert.equal(headers['content-type'], 'application/json')
+  const manifest = JSON.parse(body)
+  assert.equal(Object.keys(manifest).length, DEFAULT_CHEERS.length, 'one entry per bank phrase')
+  for (const text of DEFAULT_CHEERS) {
+    assert.ok(manifest[text]?.startsWith('/dsh-sister/cheer-audio/'), `manifest maps "${text.slice(0, 10)}..." to a static clip URL`)
+  }
+})
+
+test('serves the pre-baked audio clip for a cheer-bank entry', async () => {
+  const { apply } = await import('../index.js')
+  const { ctx, registrations } = mockCtx({ webServer: true })
+  await apply(ctx)
+  dispose(ctx)
+  const route = registrations.webRoutes.find((r) => r.path === '/dsh-sister/cheer-audio/00.m4a')
+  assert.ok(route, 'the first cheer-audio clip route is registered')
+  assert.equal(route.kind, 'exact')
+
+  let status = 0
+  let headers = {}
+  let body = null
+  const res = {
+    writeHead: (s, h) => { status = s; headers = h },
+    end: (b) => { body = b },
+  }
+  await route.handler({}, res)
+  assert.equal(status, 200)
+  assert.equal(headers['content-type'], 'audio/mp4')
+  assert.ok(Buffer.isBuffer(body) && body.length > 0, 'serves the actual audio bytes')
+})
+
 test('TTS proxy rejects a request without text', async () => {
   const { apply } = await import('../index.js')
   const { ctx, registrations } = mockCtx({ webServer: true })
