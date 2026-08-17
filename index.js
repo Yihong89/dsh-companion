@@ -12,6 +12,7 @@ import { applyVoice, VoiceController, VoiceSchedule, TICK_MS } from 'dsh-voice-c
 import { DEFAULT_STYLES, DEFAULT_STYLE } from 'dsh-voice-core'
 import { registerPersonaRoutes } from './lib/persona-routes.js'
 import { registerPersonaPrompt } from './lib/persona-prompt.js'
+import { createPersonaScheduler } from './lib/persona-scheduler.js'
 
 export const name = 'dsh-companion'
 
@@ -21,7 +22,6 @@ export const inject = ['tools', 'systemPrompt']
 // Backward-compatible re-exports (kept for callers importing the shared
 // engine's classes through this package, same pattern dsh-sister used).
 export { VoiceController, VoiceSchedule, TICK_MS }
-export const DEFAULT_CHEER_TIMES = ['15:00']
 
 /** Built-in voice quick-picks, offered in the persona config modal
  * alongside the free-text "describe your own voice" option. */
@@ -35,13 +35,12 @@ export async function apply(ctx) {
     ttsBase: process.env.DSH_VOICE_TTS_URL || 'http://127.0.0.1:3091',
     styles: COMPANION_STYLES,
     defaultStyle: DEFAULT_COMPANION_STYLE,
-    cheerTimes: DEFAULT_CHEER_TIMES,
-    schedulerEnabled: true,
-    scheduleName: 'dsh-companion',
-    greetingPrompt:
-      '（定时问候）现在是下午 3 点。请先用 cheer 工具送上一句温暖的欢迎回家问候，并顺带分享一个有趣的小知识或今天的小新闻（可以用网络搜索），一两句话就好，说完请休息放松。',
+    // dsh-voice-core's own scheduler is global (one set of times shared by
+    // every session on the preset); "cron job for the persona" needs each
+    // session's own times, so it stays disabled and dsh-companion runs its
+    // own per-session scheduler below instead.
+    schedulerEnabled: false,
   })
-  ctx.logger?.info?.(`dsh-companion: activated via dsh-voice-core — daily greetings at ${controller.schedule.times.join(', ')}, fixed text: ${controller.schedule.text ? `"${controller.schedule.text}"` : 'auto'}`)
 
   const stateDir = join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'state', 'dsh-companion')
   const webServer = ctx.get('webServer')
@@ -49,6 +48,10 @@ export async function apply(ctx) {
     registerPersonaRoutes(webServer, stateDir, '/dsh-companion/persona', ctx.logger)
   }
   registerPersonaPrompt(ctx, stateDir)
+
+  const scheduler = createPersonaScheduler(ctx, controller, stateDir)
+  scheduler.start()
+  ctx.on('dispose', () => scheduler.stop())
   // Cordis treats a plugin's `apply` return value as an "effect" (dispose
   // function, promise, or iterable of those) — returning the arbitrary
   // VoiceController object here throws `TypeError: Invalid effect` when the

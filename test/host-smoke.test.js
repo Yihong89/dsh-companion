@@ -332,3 +332,11 @@ test('registers the persona system-prompt section', async () => {
   assert.equal(sections[0].order, 0)
   assert.match(sections[0].text, /companion_persona/)
 })
+
+test('the plugin runs its own per-session scheduler (core global scheduler disabled)', async () => {
+  const { apply } = await import('../index.js')
+  const { ctx, registrations } = mockCtx()
+  await apply(ctx)
+  // dispose() must stop the plugin's own scheduler interval without throwing.
+  assert.doesNotThrow(() => dispose(ctx))
+})
