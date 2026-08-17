@@ -77,7 +77,7 @@ function mockCtx(opts = {}) {
     inject(_deps, fn) {
       fn(ctx)
     },
-    systemPrompt: { section: () => {} },
+    systemPrompt: { section: () => {}, variable: () => (() => {}) },
     tools: { register: (t) => registrations.tools.push(t) },
     commands: { register: (c) => registrations.commands.push(c) },
     sessionProjections: { register: (def) => registrations.projections.push(def) },
@@ -319,4 +319,16 @@ test('registers the persona route when a web server is present', async () => {
   const route = registrations.webRoutes.find((r) => r.path === '/dsh-companion/persona')
   assert.ok(route, 'the persona route is registered')
   assert.equal(route.kind, 'exact')
+})
+
+test('registers the persona system-prompt section', async () => {
+  const { apply } = await import('../index.js')
+  const { ctx } = mockCtx()
+  const sections = []
+  ctx.systemPrompt = { section: (s) => { sections.push(s); return () => {} }, variable: () => (() => {}) }
+  await apply(ctx)
+  dispose(ctx)
+  assert.equal(sections.length, 1)
+  assert.equal(sections[0].order, 0)
+  assert.match(sections[0].text, /companion_persona/)
 })

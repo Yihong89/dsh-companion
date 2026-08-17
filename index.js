@@ -11,6 +11,7 @@ import { join } from 'node:path'
 import { applyVoice, VoiceController, VoiceSchedule, TICK_MS } from 'dsh-voice-core'
 import { DEFAULT_STYLES, DEFAULT_STYLE } from 'dsh-voice-core'
 import { registerPersonaRoutes } from './lib/persona-routes.js'
+import { registerPersonaPrompt } from './lib/persona-prompt.js'
 
 export const name = 'dsh-companion'
 
@@ -47,6 +48,7 @@ export async function apply(ctx) {
   if (webServer !== undefined && typeof webServer.register === 'function') {
     registerPersonaRoutes(webServer, stateDir, '/dsh-companion/persona', ctx.logger)
   }
+  registerPersonaPrompt(ctx, stateDir)
   // Cordis treats a plugin's `apply` return value as an "effect" (dispose
   // function, promise, or iterable of those) — returning the arbitrary
   // VoiceController object here throws `TypeError: Invalid effect` when the
