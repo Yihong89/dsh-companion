@@ -62,10 +62,10 @@ function mockSlots() {
   return { slots, entries }
 }
 
-test('client bundle exports a slots plugin (thin shell over core)', () => {
+test('client bundle exports a slots plugin', () => {
   const coreDef = loadCore()
   const { moduleObj } = loadBundle(coreDef)
-  assert.equal(moduleObj.name, 'dsh-voice-core/companion')
+  assert.equal(moduleObj.name, 'dsh-companion')
   assert.deepEqual(moduleObj.inject, ['slots', 'conversation'])
   assert.equal(typeof moduleObj.apply, 'function')
 })
@@ -78,8 +78,9 @@ test('apply registers the invisible auto-read mount and the background overlay, 
 
   const speakBtn = entries.find((e) => e.slot === 'conversation.input.right' && e.register().opts.id === 'dsh-voice-companion-speak')
   assert.ok(speakBtn, 'the auto-read mount is registered')
-  const overlays = entries.filter((e) => e.slot === 'shell.overlay').map((e) => e.register().opts.id).sort()
-  assert.deepEqual(overlays, ['dsh-voice-companion-background'], 'no style-picker overlay is registered')
+  const overlays = entries.filter((e) => e.slot === 'shell.overlay').map((e) => e.register().opts.id)
+  assert.ok(overlays.includes('dsh-voice-companion-background'))
+  assert.ok(!overlays.some((id) => id.includes('style-picker')), 'no style-picker overlay is registered')
 })
 
 test('SpeakToggle never renders any UI, and is gated to companion sessions for its underlying effects', () => {
@@ -114,4 +115,102 @@ test('core _test helpers are re-exported by the thin shell', () => {
   assert.equal(typeof moduleObj._test.speakable, 'function')
   const { speakable } = moduleObj._test
   assert.equal(speakable('**Hello** ✅'), 'Hello ✅')
+})
+
+test('registers the persona button in the session header and the modal in shell.overlay (no style picker)', () => {
+  const coreDef = loadCore()
+  const { moduleObj } = loadBundle(coreDef)
+  const { slots, entries } = mockSlots()
+  moduleObj.apply({ get: (name) => (name === 'slots' ? slots : undefined) })
+  const header = entries.filter((e) => e.slot === 'conversation.session.header.actions')
+  assert.equal(header.length, 1)
+  assert.equal(header[0].register().opts.id, 'dsh-companion-persona-button')
+  const overlays = entries.filter((e) => e.slot === 'shell.overlay').map((e) => e.register().opts.id)
+  assert.ok(overlays.includes('dsh-companion-persona-modal'))
+  assert.ok(!overlays.some((id) => id.includes('style-picker')), 'no style picker overlay registered')
+})
+
+test('persona button only renders for a companion-preset session', () => {
+  const coreDef = loadCore()
+  const { moduleObj } = loadBundle(coreDef)
+  const { slots, entries } = mockSlots()
+  moduleObj.apply({ get: (name) => (name === 'slots' ? slots : undefined) })
+  const { component: PersonaButton } = entries.find((e) => e.slot === 'conversation.session.header.actions').register()
+
+  const other = PersonaButton({
+    sessionId: 's1',
+    useSessions: (sel) => sel({ byId: { s1: { agentPreset: 'teacher' } } }),
+  })
+  assert.equal(other, null)
+
+  const mine = PersonaButton({
+    sessionId: 's1',
+    useSessions: (sel) => sel({ byId: { s1: { agentPreset: 'companion' } } }),
+  })
+  assert.ok(mine !== null)
+  assert.equal(mine.type, 'button')
+})
+
+test('persona button shows the generic default name before any persona is fetched, then the fetched name', async () => {
+  const coreDef = loadCore()
+  const { moduleObj } = loadBundle(coreDef)
+  const { fetchPersona, DEFAULT_PERSONA } = moduleObj._test
+  const { slots, entries } = mockSlots()
+  moduleObj.apply({ get: (name) => (name === 'slots' ? slots : undefined) })
+  const { component: PersonaButton } = entries.find((e) => e.slot === 'conversation.session.header.actions').register()
+
+  const savedFetch = globalThis.fetch
+  globalThis.fetch = (url) => {
+    assert.equal(url, '/dsh-companion/persona?sessionId=s9')
+    return Promise.resolve({ ok: true, json: () => Promise.resolve({ ...DEFAULT_PERSONA, name: '小雪' }) })
+  }
+  try {
+    const before = PersonaButton({ sessionId: 's9', useSessions: (sel) => sel({ byId: { s9: { agentPreset: 'companion' } } }) })
+    assert.ok(before.children.some((c) => typeof c === 'string' && c.includes(DEFAULT_PERSONA.name)))
+    await moduleObj._test.fetchPersona('s9')
+    const after = PersonaButton({ sessionId: 's9', useSessions: (sel) => sel({ byId: { s9: { agentPreset: 'companion' } } }) })
+    assert.ok(after.children.some((c) => typeof c === 'string' && c.includes('小雪')))
+  } finally {
+    globalThis.fetch = savedFetch
+  }
+})
+
+test('resolveInstruct returns the cached persona\'s instruct once fetched, else the default', async () => {
+  const coreDef = loadCore()
+  const { moduleObj } = loadBundle(coreDef)
+  const { fetchPersona, resolveInstruct, DEFAULT_PERSONA } = moduleObj._test
+  assert.equal(resolveInstruct('never-fetched'), DEFAULT_PERSONA.voice.instruct)
+
+  const savedFetch = globalThis.fetch
+  globalThis.fetch = () => Promise.resolve({
+    ok: true,
+    json: () => Promise.resolve({ ...DEFAULT_PERSONA, voice: { presetKey: 'onee', instruct: 'onee-instruct' } }),
+  })
+  try {
+    await fetchPersona('s1')
+    assert.equal(resolveInstruct('s1'), 'onee-instruct')
+  } finally {
+    globalThis.fetch = savedFetch
+  }
+})
+
+test('savePersona PATCHes and updates the cache used by resolveInstruct', async () => {
+  const coreDef = loadCore()
+  const { moduleObj } = loadBundle(coreDef)
+  const { savePersona, resolveInstruct } = moduleObj._test
+  const savedFetch = globalThis.fetch
+  let sentBody = null
+  globalThis.fetch = (url, init) => {
+    assert.equal(url, '/dsh-companion/persona?sessionId=s1')
+    assert.equal(init.method, 'PATCH')
+    sentBody = JSON.parse(init.body)
+    return Promise.resolve({ ok: true, json: () => Promise.resolve({ ...sentBody, voice: { ...sentBody.voice } }) })
+  }
+  try {
+    await savePersona('s1', { name: '小雪', personality: 'x', voice: { presetKey: 'onee', instruct: 'onee-instruct' }, schedule: { times: [] } })
+    assert.equal(sentBody.name, '小雪')
+    assert.equal(resolveInstruct('s1'), 'onee-instruct')
+  } finally {
+    globalThis.fetch = savedFetch
+  }
 })
