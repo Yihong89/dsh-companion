@@ -8,6 +8,8 @@
 
 **Tech Stack:** Node.js ES modules, `node --test`, Cordis plugin host, React (via the harness's `__ModuleLoader__`/`require` shim, no bundler — same untranspiled ES5-ish style as the existing client files), Qwen3-TTS VoiceDesign (unchanged).
 
+> **Amendment (during Task 2 execution):** Task 2 as originally written below added `showSpeakToggle`/`showStylePicker` opt-out flags so only `dsh-companion` would hide the built-in icons while `dsh-teacher` kept them. Mid-execution the user clarified `dsh-teacher` doesn't want this UI either — so Task 2 was executed differently than written: the picker/toggle UI (and its preview/localStorage machinery) was **deleted from `dsh-voice-core` outright**, unconditionally, for every consumer, rather than gated behind flags. `SpeakToggle` still mounts (its effects — auto-read, cheer-clip playback, active-session tracking — are load-bearing) but always renders `null`. `resolveInstruct` (Task 1) is unaffected and still lands as originally planned. The concrete diffs/tests below for Task 2 reflect the ORIGINAL (superseded) flag design and were not applied verbatim — see the actual commits on `dsh-voice-core`'s `feature/dsh-companion-persona` branch for what shipped. Task 8's client code (further down) has been corrected to match: it does **not** pass `showSpeakToggle`/`showStylePicker` to `createVoiceClient` (those options no longer exist).
+
 ## Global Constraints
 
 - Node `>=22.5.0`, ES modules (`"type": "module"`) — matches both repos' existing `package.json`.
@@ -1780,7 +1782,7 @@ Replaces the old style-picker UI entirely: a button beside the session title ope
 - Modify: `/Users/yihongzhang/Documents/claude-workspace/dsh-sister/test/client-bundle.test.js`
 
 **Interfaces:**
-- Consumes: `core.createVoiceClient(opts)` from `dsh-voice-core` with the Task 1/2 additions: `opts.resolveInstruct`, `opts.showSpeakToggle: false`, `opts.showStylePicker: false`.
+- Consumes: `core.createVoiceClient(opts)` from `dsh-voice-core` with the Task 1 addition `opts.resolveInstruct` (`dsh-voice-core` no longer renders any picker/toggle UI at all — see the amendment note at the top of this plan — so there is nothing left to suppress).
 - Produces: the exported plugin registers `PersonaButton` into `conversation.session.header.actions` (gated to `presetName === 'companion'`, mirrors dsh-voice-core's own preset-gating pattern) and `PersonaModal` into `shell.overlay`. `exports._test` gains `fetchPersona`, `savePersona`, `resolveInstruct`, `DEFAULT_PERSONA`, `STYLES` for direct unit coverage.
 
 - [ ] **Step 1: Write the failing tests**
@@ -1891,11 +1893,11 @@ Expected: FAIL (`conversation.session.header.actions` slot never registered; `mo
 
 ```js
 /**
- * dsh-companion Web client — persona button + config modal, replacing the
- * shared core's style picker entirely (this plugin passes
- * showStylePicker/showSpeakToggle: false). resolveInstruct makes the
- * actual auto-read TTS use THIS session's saved voice, not a static
- * default (see dsh-voice-core Task 1).
+ * dsh-companion Web client — persona button + config modal. The shared
+ * core renders no picker/toggle UI of its own anymore, so this is the
+ * ONLY voice-config surface. resolveInstruct makes the actual auto-read
+ * TTS use THIS session's saved voice, not a static default (see
+ * dsh-voice-core Task 1).
  *
  * @module dsh-companion/client
  */
@@ -2162,10 +2164,7 @@ window.__ModuleLoader__.load({
         ttsPath: TTS_PATH,
         styles: STYLES,
         defaultStyle: 'paimon',
-        previewText: '嗨嗨！我是你的新搭档呀～',
         resolveInstruct: resolveInstruct,
-        showSpeakToggle: false,
-        showStylePicker: false,
       })
       voiceClient.apply(ctx)
       var slots = ctx.get('slots')
@@ -2200,9 +2199,9 @@ feat: persona button + config modal, replacing the style picker
 Button moves to the session header (beside the title), opens a modal for
 name, free-text personality, voice (4 built-in presets + a fully custom
 text description), and daily greeting times. Wires dsh-voice-core's new
-resolveInstruct/showSpeakToggle/showStylePicker options so auto-read
-actually uses this session's saved voice and neither of the core's own
-composer-row icons render.
+resolveInstruct option so auto-read actually uses this session's saved
+voice -- the core itself no longer renders any picker/toggle icons at
+all, for any consumer.
 
 Co-authored-by: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_014SAp4ExzYJzUNJcUxSdN8i
