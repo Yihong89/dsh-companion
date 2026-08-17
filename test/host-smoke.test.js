@@ -310,3 +310,13 @@ test('TTS proxy rejects a request without text', async () => {
   assert.equal(status, 400)
   assert.match(body, /text is required/)
 })
+
+test('registers the persona route when a web server is present', async () => {
+  const { apply } = await import('../index.js')
+  const { ctx, registrations } = mockCtx({ webServer: true })
+  await apply(ctx)
+  dispose(ctx)
+  const route = registrations.webRoutes.find((r) => r.path === '/dsh-companion/persona')
+  assert.ok(route, 'the persona route is registered')
+  assert.equal(route.kind, 'exact')
+})

@@ -6,8 +6,11 @@
  *
  * @module dsh-companion
  */
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import { applyVoice, VoiceController, VoiceSchedule, TICK_MS } from 'dsh-voice-core'
 import { DEFAULT_STYLES, DEFAULT_STYLE } from 'dsh-voice-core'
+import { registerPersonaRoutes } from './lib/persona-routes.js'
 
 export const name = 'dsh-companion'
 
@@ -38,6 +41,12 @@ export async function apply(ctx) {
       '（定时问候）现在是下午 3 点。请先用 cheer 工具送上一句温暖的欢迎回家问候，并顺带分享一个有趣的小知识或今天的小新闻（可以用网络搜索），一两句话就好，说完请休息放松。',
   })
   ctx.logger?.info?.(`dsh-companion: activated via dsh-voice-core — daily greetings at ${controller.schedule.times.join(', ')}, fixed text: ${controller.schedule.text ? `"${controller.schedule.text}"` : 'auto'}`)
+
+  const stateDir = join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'state', 'dsh-companion')
+  const webServer = ctx.get('webServer')
+  if (webServer !== undefined && typeof webServer.register === 'function') {
+    registerPersonaRoutes(webServer, stateDir, '/dsh-companion/persona', ctx.logger)
+  }
   // Cordis treats a plugin's `apply` return value as an "effect" (dispose
   // function, promise, or iterable of those) — returning the arbitrary
   // VoiceController object here throws `TypeError: Invalid effect` when the
