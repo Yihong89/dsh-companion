@@ -1,31 +1,31 @@
-# dsh-sister
+# dsh-companion
 
-一个温暖、超可爱、**派蒙风格萝莉音**的「妹妹」陪伴 Agent（DeepSeek Harness 插件）。
-她的声音由 **Qwen3-TTS**（本地部署在 mac mini 上）生成，浏览器播放——声音从使用者
-自己的机器出来，跨平台（macOS / Windows / Chrome / Edge / Safari），无需服务器 TTS
-或 API key。她会朗读每一句回复、每天定时送暖心打气、随时随地 cheer 你一下。
+一个完全可自定义的陪伴 Agent（DeepSeek Harness 插件）——名字、性格、声音都由你
+在对话里配置，不需要 fork 仓库或发布新包。声音由 **Qwen3-TTS**（本地部署在
+mac mini 上）生成，浏览器播放——跨平台（macOS / Windows / Chrome / Edge /
+Safari），无需服务器 TTS 或 API key。
 
-> 妹妹陪伴 · Qwen3-TTS 萝莉音 · 每日定时打气 · 零构建
+> 任意人设 · 任意声音 · 每个会话自己的定时问候 · 零构建
 
 ## 亮点
 
-- **Qwen3-TTS 音色**（本地 1.7B VoiceDesign，MPS 加速）：不是浏览器自带语音，
-  而是用自然语言描述生成音色——✨派蒙风（默认）、🌸软萌可爱、⚡元气少女、🎧清冷御姐。
-  每个音色点击即试听，自动记住选择（localStorage）。
-- **自动朗读每一句回复**：妹妹每次回话都会说出口（先出文字，再出声音）。
-- **`speak` / `cheer` 模型工具**：妹妹可随时要求把某句念出来，或弹出 💛 打气卡片。
-- **每日定时打气**：默认 08:00 / 16:30（`/cheer-at` 可改），到点自动向所有在线的
-  妹妹会话送一句打气（朗读 + 💛 卡片），持久化到
-  `$DSH_HOME/state/dsh-sister/schedule.json`，每个时间每天只触发一次。
-- **中文优先**：妹妹讲中文（偶尔夹英文撒娇词），音色生成针对中文优化。
+- **会话内配置**：会话标题旁的 👤 按钮打开配置窗口——填名字、性格设定，选一个
+  内置音色（点击试听）或直接用文字描述一个全新的声音，Qwen3-TTS 会按你的描述
+  生成。保存立刻生效，不用重启。
+- **每个会话独立**：人设按会话保存，不同会话可以是完全不同的搭档；新会话在
+  第一次保存前使用一个通用的默认人设（小助手）。
+- **自动朗读每一句回复**：搭档每次回话都会说出口，用的是这个会话保存的声音。
+- **`speak` / `cheer` 模型工具**：搭档可随时要求把某句念出来，或弹出 💛 打气卡片。
+- **每个搭档自己的定时问候**：在配置窗口里加一个或多个时间（HH:MM），到点会
+  用这个搭档的人设生成一句问候，只送进这一个会话——不会影响其他会话。
 
 ## 架构
 
 ```
 浏览器 (dsh web GUI)                 mac mini (dsh host)
-┌─────────────────────┐     /dsh-sister/tts      ┌──────────────────────────┐
-│  client.js           │ ───────────────────────► │ dsh-sister 插件 (Node)    │
-│  fetch WAV → <audio> │                          │  代理 → 127.0.0.1:3091    │
+┌─────────────────────┐   /dsh-companion/tts     ┌──────────────────────────┐
+│  client.js            │ ───────────────────────► │ dsh-companion 插件 (Node) │
+│  fetch WAV → <audio>  │                          │  代理 → 127.0.0.1:3091   │
 └─────────────────────┘                          └──────────┬───────────────┘
                                                             │ http
                                               ┌─────────────▼─────────────┐
@@ -35,11 +35,10 @@
                                               └───────────────────────────┘
 ```
 
-- Python TTS 服务：`~/tts_service.py`（venv `~/qwen-tts-venv`），launchd 守护
-  `com.dsh.sister-tts`，监听 `127.0.0.1:3091`（仅回环，不暴露到 LAN）。
-- 浏览器通过 host 代理 `/dsh-sister/tts?text=…&instruct=…` 拿 WAV，声音在浏览器
-  里播放，所以无论谁在哪个设备上用，声音都从他/她的机器出来。
-- 模型权重约 4GB，首次加载 10–60s，之后常驻；每句生成约 4–10s（M4）。
+人设/声音/问候时间存在 `$DSH_HOME/state/dsh-companion/personas/<sessionId>.json`，
+按会话读写；系统提示词按会话动态渲染（一个 preset composition 每进程只挂载
+一次，被所有会话共享，所以人设不能写死在插件启动时的闭包里）。问候调度也是
+按会话独立跑的一套小定时器，不是所有会话共用一个全局时间表。
 
 ## 安装
 
@@ -59,15 +58,20 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.dsh.sister-tts.plist
 dsh plugin --profile web add github:Yihong89/dsh-sister
 ```
 
-Bundle patch 有意为空——插件只在预设里显式写了 `name: dsh-sister` 行时才激活
-（即 `sister` 预设 `~/.dsh/.agent-presets/sister/agent.cordis.yml`）。同时在
-profile 的 `cordis.patch.yml` 注册事件类型：
+Bundle patch 有意为空——插件只在预设里显式写了 `name: dsh-companion` 行时才
+激活（即 `companion` 预设 `~/.dsh/.agent-presets/companion/agent.cordis.yml`）。
+
+### 3. 创建 `companion` 预设
+
+`~/.dsh/.agent-presets/companion/agent.cordis.yml`：
 
 ```yaml
 - insert:
-    - id: dsh-sister-registrar
-      name: dsh-sister/register-events
+    - id: dsh-companion
+      name: dsh-companion
 ```
+
+用这个预设新建会话后，点会话标题旁的 👤 按钮即可开始配置。
 
 ## 命令
 
@@ -76,34 +80,21 @@ profile 的 `cordis.patch.yml` 注册事件类型：
 | `/speak on\|off` | 开关自动朗读 |
 | `/speak <text>` | 立刻把文字念出来 |
 | `/cheer [text]` | 立刻送一句打气（朗读 + 💛 卡片）；不写文字用内置语库 |
-| `/cheer-at 15:00` | 设置每日打气/欢迎时间（HH:MM，24 小时制，可多个） |
-| `/cheer-text <text>` | 固定欢迎语（如 `/cheer-text 哥哥，欢迎回家`）；`off` 清除 |
-| `/sister` | 查看状态：朗读开关 + 打气时间 + 固定文案 |
 
-## 每日定时欢迎（自动变化 + 趣闻）
+> `/cheer-at` / `/cheer-text` 命令仍然存在（继承自 dsh-voice-core），但对
+> dsh-companion 没有实际效果——问候时间现在存在每个会话自己的人设文件里，
+> 只能通过 👤 配置窗口设置。这是已知的一处粗糙边缘，留给后续清理。
 
-到点后，妹妹会**自己生成**一条欢迎问候：用 cheer 工具送上一句"欢迎回家"，再通过网络搜索分享一个今天的小趣闻/小新闻（每天都不一样），最后用 Qwen3-TTS 派蒙音朗读出来，并弹出 💛 卡片。
+## 已知限制
 
-- 设时间：`/cheer-at 15:00`（可多个时间）
-- 想要固定文案（不变化）：`/cheer-text 哥哥，欢迎回家`；清除用 `/cheer-text off`
-- 调度在插件内部（宿主侧），与浏览器/前端无关——唯一要求是**到点时刻目标设备浏览器开着 DSH 标签页**，声音才会响起
-- 每个时间每天触发一次；错过的时间直接跳过，不补发
-
-## 音色风格（🎤 面板）
-
-| 风格 | 说明 |
-| --- | --- |
-| ✨ 派蒙风（默认） | 撒娇稚嫩萝莉音，音调偏高起伏明显，像动画小精灵 |
-| 🌸 软萌可爱 | 温柔甜美少女音，软糯撒娇 |
-| ⚡ 元气少女 | 活泼清亮，语速稍快，阳光干劲 |
-| 🎧 清冷御姐 | 清冷柔和，语速平缓优雅 |
-
-点一下即用 Qwen3-TTS 生成并试听（几秒钟），自动记住最后选择。
+- 声音预览、试听音频不会被缓存/预生成——每次点击都会实时调用 Qwen3-TTS
+  （几秒钟）。
+- `/cheer-at` / `/cheer-text` 命令对问候时间不再生效（见上）。
 
 ## 测试
 
 ```bash
-node --test test/*.test.js   # 34 tests
+node --test test/*.test.js
 ```
 
 ## License
