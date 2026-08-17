@@ -1,7 +1,7 @@
 {
-  "name": "dsh-sister",
+  "name": "dsh-companion",
   "version": "0.1.0",
-  "description": "DSH companion plugin: a warm, cheerful 'little sister' agent that speaks with a soft voice in the browser, auto-reads every reply aloud, fires scheduled daily cheers, and lifts the learner's mood with lots of positive emotion.",
+  "description": "DSH companion plugin: a fully customizable voice-and-personality companion. Configure any name, personality, and TTS voice per chat session -- no forking or publishing a new package required.",
   "type": "module",
   "main": "index.js",
   "exports": {
@@ -29,8 +29,8 @@
     "cordis",
     "companion",
     "tts",
-    "cheer",
-    "motivation"
+    "persona",
+    "cheer"
   ],
   "dependencies": {
     "zod": "^4.0.0",

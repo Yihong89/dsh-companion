@@ -10,10 +10,11 @@
  */
 import { test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdirSync, writeFileSync, rmSync, mkdtempSync } from 'node:fs'
+import { mkdirSync, writeFileSync, rmSync, mkdtempSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+import { createRequire } from 'node:module'
 
 const REPO_ROOT = dirname(dirname(fileURLToPath(import.meta.url)))
 
@@ -41,10 +42,9 @@ function installToolStub() {
     join(sessionDir, 'package.json'),
     JSON.stringify({ name: '@deepseek-ai/dsh-session', type: 'module', main: 'index.js' }),
   )
-  writeFileSync(
-    join(sessionDir, 'index.js'),
-    'export const KNOWN_SESSION_EVENT_TYPES = new Set()\n',
-  )
+  const sessionIndexPath = join(sessionDir, 'index.js')
+  writeFileSync(sessionIndexPath, 'export const KNOWN_SESSION_EVENT_TYPES = new Set()\n')
+
   return dir
 }
 
@@ -77,7 +77,7 @@ function mockCtx(opts = {}) {
     inject(_deps, fn) {
       fn(ctx)
     },
-    systemPrompt: { section: () => {} },
+    systemPrompt: { section: () => {}, variable: () => (() => {}) },
     tools: { register: (t) => registrations.tools.push(t) },
     commands: { register: (c) => registrations.commands.push(c) },
     sessionProjections: { register: (def) => registrations.projections.push(def) },
@@ -99,7 +99,7 @@ let smokeHomeDir = null
 
 before(() => {
   stubDir = installToolStub()
-  smokeHomeDir = mkdtempSync(join(tmpdir(), 'dsh-sister-home-'))
+  smokeHomeDir = mkdtempSync(join(tmpdir(), 'dsh-companion-home-'))
   process.env.DSH_HOME = smokeHomeDir
 })
 
@@ -116,7 +116,7 @@ test('apply resolves to undefined (cordis treats a plugin\'s return value as an 
   assert.equal(result, undefined)
 })
 
-test('host plugin registers commands, tools, and the sisterSpeak projection', async () => {
+test('host plugin registers commands, tools, and the voiceSpeak projection', async () => {
   const { apply } = await import('../index.js')
   const { ctx, registrations } = mockCtx()
   await apply(ctx)
@@ -131,7 +131,19 @@ test('host plugin registers commands, tools, and the sisterSpeak projection', as
 })
 
 test('session event types are registered into the catalog', async () => {
-  const { KNOWN_SESSION_EVENT_TYPES } = await import('@deepseek-ai/dsh-session')
+  await import('../index.js') // triggers dsh-voice-core's module-top-level KNOWN_SESSION_EVENT_TYPES.add() calls
+  // @deepseek-ai/dsh-session is a peerDependency of dsh-voice-core: in a dev
+  // environment where pnpm can reach a real published copy, it resolves
+  // dsh-voice-core's import to that copy's real (exports-mapped) entry
+  // point rather than hoisting to this repo's own node_modules stub -- a
+  // DIFFERENT module instance with its own Set than a bare `import
+  // '@deepseek-ai/dsh-session'` from this test file would resolve to.
+  // Resolve it the exact way dsh-voice-core's own ESM import does (from
+  // its real, non-symlinked install location) so this reads the same Set
+  // instance that was actually mutated, whichever one that is.
+  const realIndexPath = realpathSync(join(REPO_ROOT, 'node_modules', 'dsh-voice-core', 'index.js'))
+  const sessionPath = createRequire(realIndexPath).resolve('@deepseek-ai/dsh-session')
+  const { KNOWN_SESSION_EVENT_TYPES } = await import(pathToFileURL(sessionPath).href)
   assert.ok(KNOWN_SESSION_EVENT_TYPES.has('voice/speak'))
   assert.ok(KNOWN_SESSION_EVENT_TYPES.has('voice/spoken'))
   assert.ok(KNOWN_SESSION_EVENT_TYPES.has('voice/cheer'))
@@ -193,7 +205,7 @@ test('cheer-at validates and persists times', async () => {
 
 test('scheduler fires one cheer per due time per day, only into tracked sessions', async () => {
   const { VoiceController, VoiceSchedule } = await import('../index.js')
-  const schedulePath = join(smokeHomeDir, 'state', 'dsh-sister', 'schedule.json')
+  const schedulePath = join(smokeHomeDir, 'state', 'dsh-companion', 'schedule.json')
   const schedule = new VoiceSchedule(schedulePath)
   const controller = new VoiceController({ logger: { warn: () => {} } }, schedule, { greetingPrompt: '欢迎回家+趣闻' })
   // Track a session (no followup → greet falls back to a direct cheer).
@@ -219,9 +231,9 @@ test('scheduler fires one cheer per due time per day, only into tracked sessions
   assert.equal(await controller2.tick(), 0)
 })
 
-test('greet nudges the sister via followup (model composes the welcome)', async () => {
+test('greet nudges the companion via followup (model composes the welcome)', async () => {
   const { VoiceController, VoiceSchedule } = await import('../index.js')
-  const schedulePath = join(smokeHomeDir, 'state', 'dsh-sister', 'greet.json')
+  const schedulePath = join(smokeHomeDir, 'state', 'dsh-companion', 'greet.json')
   const schedule = new VoiceSchedule(schedulePath)
   const controller = new VoiceController({ logger: { warn: () => {} } }, schedule, { greetingPrompt: '（定时问候）欢迎回家+趣闻' })
   const followups = []
@@ -241,7 +253,7 @@ test('greet nudges the sister via followup (model composes the welcome)', async 
 
 test('fixed cheer text is spoken verbatim instead of the model nudge', async () => {
   const { VoiceController, VoiceSchedule } = await import('../index.js')
-  const schedulePath = join(smokeHomeDir, 'state', 'dsh-sister', 'fixed.json')
+  const schedulePath = join(smokeHomeDir, 'state', 'dsh-companion', 'fixed.json')
   const schedule = new VoiceSchedule(schedulePath)
   schedule.setText('哥哥，欢迎回家')
   const controller = new VoiceController({ logger: { warn: () => {} } }, schedule)
@@ -259,7 +271,7 @@ test('fixed cheer text is spoken verbatim instead of the model nudge', async () 
 
 test('schedule round-trips to disk (times + fired set survive)', async () => {
   const { VoiceSchedule } = await import('../index.js')
-  const schedulePath = join(smokeHomeDir, 'state', 'dsh-sister', 'roundtrip.json')
+  const schedulePath = join(smokeHomeDir, 'state', 'dsh-companion', 'roundtrip.json')
   const a = new VoiceSchedule(schedulePath)
   a.setTimes(['07:15', '19:45'])
   a.markFired('2026-08-15', '07:15')
@@ -275,82 +287,11 @@ test('registers the TTS proxy routes when a web server is present', async () => 
   await apply(ctx)
   dispose(ctx)
   const paths = registrations.webRoutes.map((r) => r.path)
-  assert.ok(paths.includes('/dsh-sister/tts'))
-  assert.ok(paths.includes('/dsh-sister/tts-health'))
-  const tts = registrations.webRoutes.find((r) => r.path === '/dsh-sister/tts')
+  assert.ok(paths.includes('/dsh-companion/tts'))
+  assert.ok(paths.includes('/dsh-companion/tts-health'))
+  const tts = registrations.webRoutes.find((r) => r.path === '/dsh-companion/tts')
   assert.equal(tts.kind, 'exact')
   assert.equal(typeof tts.handler, 'function')
-})
-
-test('serves the background image at /dsh-sister/background.jpg', async () => {
-  const { apply } = await import('../index.js')
-  const { ctx, registrations } = mockCtx({ webServer: true })
-  await apply(ctx)
-  dispose(ctx)
-  const route = registrations.webRoutes.find((r) => r.path === '/dsh-sister/background.jpg')
-  assert.ok(route, 'the background route is registered')
-  assert.equal(route.kind, 'exact')
-
-  let status = 0
-  let headers = {}
-  let body = null
-  const res = {
-    writeHead: (s, h) => { status = s; headers = h },
-    end: (b) => { body = b },
-  }
-  await route.handler({}, res)
-  assert.equal(status, 200)
-  assert.equal(headers['content-type'], 'image/jpeg')
-  assert.ok(Buffer.isBuffer(body) && body.length > 0, 'serves the actual image bytes')
-})
-
-test('serves a cheer-audio manifest mapping every DEFAULT_CHEERS entry to a static clip URL', async () => {
-  const { apply } = await import('../index.js')
-  const { DEFAULT_CHEERS } = await import('dsh-voice-core')
-  const { ctx, registrations } = mockCtx({ webServer: true })
-  await apply(ctx)
-  dispose(ctx)
-  const route = registrations.webRoutes.find((r) => r.path === '/dsh-sister/cheer-audio/manifest.json')
-  assert.ok(route, 'the cheer-audio manifest route is registered')
-  assert.equal(route.kind, 'exact')
-
-  let status = 0
-  let headers = {}
-  let body = null
-  const res = {
-    writeHead: (s, h) => { status = s; headers = h },
-    end: (b) => { body = b },
-  }
-  route.handler({}, res)
-  assert.equal(status, 200)
-  assert.equal(headers['content-type'], 'application/json')
-  const manifest = JSON.parse(body)
-  assert.equal(Object.keys(manifest).length, DEFAULT_CHEERS.length, 'one entry per bank phrase')
-  for (const text of DEFAULT_CHEERS) {
-    assert.ok(manifest[text]?.startsWith('/dsh-sister/cheer-audio/'), `manifest maps "${text.slice(0, 10)}..." to a static clip URL`)
-  }
-})
-
-test('serves the pre-baked audio clip for a cheer-bank entry', async () => {
-  const { apply } = await import('../index.js')
-  const { ctx, registrations } = mockCtx({ webServer: true })
-  await apply(ctx)
-  dispose(ctx)
-  const route = registrations.webRoutes.find((r) => r.path === '/dsh-sister/cheer-audio/00.m4a')
-  assert.ok(route, 'the first cheer-audio clip route is registered')
-  assert.equal(route.kind, 'exact')
-
-  let status = 0
-  let headers = {}
-  let body = null
-  const res = {
-    writeHead: (s, h) => { status = s; headers = h },
-    end: (b) => { body = b },
-  }
-  await route.handler({}, res)
-  assert.equal(status, 200)
-  assert.equal(headers['content-type'], 'audio/mp4')
-  assert.ok(Buffer.isBuffer(body) && body.length > 0, 'serves the actual audio bytes')
 })
 
 test('TTS proxy rejects a request without text', async () => {
@@ -358,14 +299,44 @@ test('TTS proxy rejects a request without text', async () => {
   const { ctx, registrations } = mockCtx({ webServer: true })
   await apply(ctx)
   dispose(ctx)
-  const tts = registrations.webRoutes.find((r) => r.path === '/dsh-sister/tts')
+  const tts = registrations.webRoutes.find((r) => r.path === '/dsh-companion/tts')
   let status = 0
   let body = ''
   const res = {
     writeHead: (s) => { status = s },
     end: (b) => { body = b },
   }
-  await tts.handler({ url: '/dsh-sister/tts?instruct=x' }, res)
+  await tts.handler({ url: '/dsh-companion/tts?instruct=x' }, res)
   assert.equal(status, 400)
   assert.match(body, /text is required/)
+})
+
+test('registers the persona route when a web server is present', async () => {
+  const { apply } = await import('../index.js')
+  const { ctx, registrations } = mockCtx({ webServer: true })
+  await apply(ctx)
+  dispose(ctx)
+  const route = registrations.webRoutes.find((r) => r.path === '/dsh-companion/persona')
+  assert.ok(route, 'the persona route is registered')
+  assert.equal(route.kind, 'exact')
+})
+
+test('registers the persona system-prompt section', async () => {
+  const { apply } = await import('../index.js')
+  const { ctx } = mockCtx()
+  const sections = []
+  ctx.systemPrompt = { section: (s) => { sections.push(s); return () => {} }, variable: () => (() => {}) }
+  await apply(ctx)
+  dispose(ctx)
+  assert.equal(sections.length, 1)
+  assert.equal(sections[0].order, 0)
+  assert.match(sections[0].text, /companion_persona/)
+})
+
+test('the plugin runs its own per-session scheduler (core global scheduler disabled)', async () => {
+  const { apply } = await import('../index.js')
+  const { ctx, registrations } = mockCtx()
+  await apply(ctx)
+  // dispose() must stop the plugin's own scheduler interval without throwing.
+  assert.doesNotThrow(() => dispose(ctx))
 })
