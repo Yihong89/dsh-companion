@@ -55,7 +55,7 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.dsh.sister-tts.plist
 ### 2. 安装插件
 
 ```bash
-dsh plugin --profile web add github:Yihong89/dsh-sister
+dsh plugin --profile web add github:Yihong89/dsh-companion
 ```
 
 Bundle patch 有意为空——插件只在预设里显式写了 `name: dsh-companion` 行时才

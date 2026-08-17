@@ -20,7 +20,7 @@ export const name = 'dsh-companion'
 export const inject = ['tools', 'systemPrompt']
 
 // Backward-compatible re-exports (kept for callers importing the shared
-// engine's classes through this package, same pattern dsh-sister used).
+// engine's classes through this package).
 export { VoiceController, VoiceSchedule, TICK_MS }
 
 /** Built-in voice quick-picks, offered in the persona config modal
